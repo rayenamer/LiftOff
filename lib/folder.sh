@@ -1,0 +1,85 @@
+# Folder mode: run an app straight from its project directory.
+#
+#   detect stack -> install deps if they changed -> start -> wait for URL -> open browser
+#
+# The app runs in its own process group, so stopping Liftoff (Ctrl+C or closing
+# the terminal) stops the whole tree — dev servers, watchers and all.
+
+folder::run() {
+  [[ -n $APP_NODE_VERSION ]] && folder::use_node "$APP_NODE_VERSION"
+
+  stack::detect "$APP_DIR"
+  [[ -n $START_CMD ]] || die "Can't tell how to start $APP_DIR — set APP_START_CMD"
+  log::info "$APP_NAME · $STACK · $APP_DIR"
+  cd "$APP_DIR"
+
+  if [[ -n $APP_URL ]] && url::is_up "$APP_URL"; then
+    log::ok "$APP_NAME is already running"
+    url::open_browser
+    return
+  fi
+
+  folder::install_deps
+  folder::start
+}
+
+folder::start() {
+  log::info "Starting: $START_CMD"
+  setsid bash -c "$START_CMD" &
+  APP_PID=$!
+
+  trap folder::stop EXIT
+  trap 'exit 130' INT TERM HUP
+
+  if [[ -n $APP_URL ]]; then
+    url::wait_for "$APP_URL" "$APP_WAIT_TIMEOUT" kill -0 "$APP_PID" || exit 1
+    url::open_browser
+  fi
+
+  log::info "Running. Press Ctrl+C or close this window to stop."
+  wait "$APP_PID"
+}
+
+folder::stop() {
+  kill -0 "$APP_PID" 2>/dev/null || return 0
+  log::info "Stopping $APP_NAME"
+  kill -TERM -- "-$APP_PID" 2>/dev/null || true
+}
+
+folder::install_deps() {
+  [[ -n $INSTALL_CMD && $APP_INSTALL != never ]] || return 0
+
+  local stamp_file current_stamp
+  stamp_file="$(app_state_dir)/deps.sha256"
+  current_stamp=$(folder::deps_fingerprint)
+
+  if [[ $APP_INSTALL == auto && -f $stamp_file && $(<"$stamp_file") == "$current_stamp" ]]; then
+    log::ok "Dependencies are up to date"
+    return
+  fi
+
+  log::info "Installing dependencies: $INSTALL_CMD"
+  bash -c "$INSTALL_CMD" || die "Dependency install failed"
+
+  # Installing can create a lockfile (and so change what we detect); fingerprint the result.
+  stack::detect "$APP_DIR"
+  folder::deps_fingerprint >"$stamp_file"
+  log::ok "Dependencies installed"
+}
+
+# Changes when the install command or deps file changes, or the deps folder is deleted.
+folder::deps_fingerprint() {
+  {
+    printf '%s\n' "$INSTALL_CMD"
+    if [[ -n $DEPS_DIR && -d $DEPS_DIR ]]; then printf 'deps-dir present\n'; fi
+    if [[ -n $DEPS_FILE && -f $DEPS_FILE ]]; then cat "$DEPS_FILE"; fi
+  } | sha256sum | cut -d' ' -f1
+}
+
+# Put a specific nvm-installed Node first on PATH, without sourcing nvm itself.
+folder::use_node() {
+  local bin="${NVM_DIR:-$HOME/.nvm}/versions/node/v${1#v}/bin"
+  [[ -x $bin/node ]] || die "Node $1 is not installed via nvm (looked in $bin)"
+  export PATH="$bin:$PATH"
+  log::info "Using Node $(node --version)"
+}

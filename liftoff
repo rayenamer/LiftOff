@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# Liftoff — launch any app, from a project folder or a container registry.
+# Every input is an environment variable; an optional .env file can supply them.
+#
+#   liftoff run       [app.env]   install deps if needed, start, wait, open browser
+#   liftoff install    app.env    add a menu entry + desktop icon that runs the app
+#   liftoff uninstall  app.env    remove that menu entry + desktop icon
+#   liftoff check     [app.env]   print the resolved configuration
+#
+set -Eeuo pipefail
+
+LIFTOFF_HOME=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
+LIFTOFF_BIN="$LIFTOFF_HOME/liftoff"
+
+for lib in "$LIFTOFF_HOME"/lib/*.sh; do
+  # shellcheck source=/dev/null
+  source "$lib"
+done
+
+usage() {
+  sed -n '3,10s/^# \{0,1\}//p' "$LIFTOFF_BIN"
+  printf '\nAll variables are documented in %s/app.env.example\n' "$LIFTOFF_HOME"
+}
+
+run_app() {
+  case $APP_MODE in
+    folder)    folder::run ;;
+    container) container::run ;;
+  esac
+}
+
+main() {
+  local command=${1:-help}
+  shift || true
+
+  case $command in
+    run)       config::load "${1:-}" && run_app ;;
+    install)   config::load "${1:-}" && desktop::install ;;
+    uninstall) config::load "${1:-}" && desktop::uninstall ;;
+    check)     config::load "${1:-}" && config::print ;;
+    help | -h | --help) usage ;;
+    *) usage; die "Unknown command: $command" ;;
+  esac
+}
+
+main "$@"
