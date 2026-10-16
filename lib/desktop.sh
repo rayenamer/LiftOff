@@ -1,9 +1,9 @@
-# Creates the clickable launcher: an app-menu entry and (optionally) a desktop icon.
+# Makes the launcher clickable: an app-menu entry and (optionally) a desktop icon,
+# both pointing at the generated standalone launcher.
 
 desktop::install() {
-  [[ -n $APP_ENV_FILE ]] || die "install needs an env file, so the icon knows what to launch"
-
   local icon entry
+  launcher::generate
   icon=$(desktop::prepare_icon)
   entry=$(desktop::menu_entry_path)
 
@@ -27,7 +27,7 @@ desktop::install() {
 
 desktop::uninstall() {
   local file
-  for file in "$(desktop::menu_entry_path)" "$(desktop::shortcut_path)"; do
+  for file in "$(desktop::menu_entry_path)" "$(desktop::shortcut_path)" "$(launcher::path)"; do
     [[ -f $file ]] || continue
     rm -f "$file"
     log::ok "Removed $file"
@@ -41,8 +41,8 @@ desktop::render() {
 Type=Application
 Version=1.0
 Name=$APP_NAME
-Comment=Launch $APP_NAME with Liftoff
-Exec="$LIFTOFF_BIN" run "$APP_ENV_FILE"
+Comment=Launch $APP_NAME
+Exec="$(launcher::path)"
 Icon=$1
 Terminal=$APP_TERMINAL
 Categories=Development;

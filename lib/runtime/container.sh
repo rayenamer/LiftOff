@@ -3,6 +3,7 @@
 #   login (if credentials given) -> pull -> run -> wait for URL -> open browser -> follow logs
 #
 # Closing the terminal or pressing Ctrl+C stops the container (DOCKER_STOP_ON_EXIT).
+# The registry password is only ever piped to `docker login --password-stdin`.
 
 container::run() {
   require_cmd docker

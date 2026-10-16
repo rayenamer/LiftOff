@@ -2,7 +2,7 @@
 #
 # Every input is an environment variable. An optional .env file supplies them,
 # and anything already exported in the real environment wins over the file,
-# so `APP_URL=http://localhost:5000 liftoff run app.env` works as expected.
+# so `APP_URL=http://localhost:5000 liftoff install app.env` works as expected.
 
 CONFIG_VAR_PATTERN='(APP|DOCKER)_[A-Z0-9_]*'
 
@@ -41,7 +41,7 @@ config::apply_defaults() {
 
   # General
   APP_SLUG=${APP_SLUG:-$(slugify "$APP_NAME")}
-  APP_MODE=${APP_MODE:-$([[ -n ${DOCKER_IMAGE:-} ]] && echo container || echo folder)}
+  APP_MODE=${APP_MODE:-$(config::guess_mode)}
   APP_URL=${APP_URL:-}
   APP_OPEN_BROWSER=${APP_OPEN_BROWSER:-true}
   APP_BROWSER=${APP_BROWSER:-xdg-open}
@@ -56,6 +56,9 @@ config::apply_defaults() {
   APP_INSTALL_CMD=${APP_INSTALL_CMD:-}
   APP_START_CMD=${APP_START_CMD:-}
   APP_NODE_VERSION=${APP_NODE_VERSION:-}
+
+  # Script mode
+  APP_SCRIPT=${APP_SCRIPT:-}
 
   # Container mode
   DOCKER_IMAGE=${DOCKER_IMAGE:-}
@@ -74,6 +77,7 @@ config::apply_defaults() {
 
   # Relative paths are relative to the env file, not to wherever you ran liftoff.
   APP_DIR=$(config::resolve_path "$APP_DIR")
+  APP_SCRIPT=$(config::resolve_path "$APP_SCRIPT")
   DOCKER_ENV_FILE=$(config::resolve_path "$DOCKER_ENV_FILE")
   DOCKER_PASSWORD_FILE=$(config::resolve_path "$DOCKER_PASSWORD_FILE")
   if [[ $APP_ICON == */* ]] && ! is_url "$APP_ICON"; then
@@ -81,8 +85,15 @@ config::apply_defaults() {
   fi
 }
 
+config::guess_mode() {
+  if   [[ -n ${DOCKER_IMAGE:-} ]]; then echo container
+  elif [[ -n ${APP_SCRIPT:-} ]];   then echo script
+  else                                  echo folder
+  fi
+}
+
 config::validate() {
-  [[ $APP_MODE =~ ^(folder|container)$ ]] || die "APP_MODE must be 'folder' or 'container'"
+  [[ $APP_MODE =~ ^(folder|script|container)$ ]] || die "APP_MODE must be folder, script or container"
   [[ -z $APP_URL ]] || is_url "$APP_URL" || die "APP_URL must start with http:// or https://"
   [[ $APP_WAIT_TIMEOUT =~ ^[0-9]+$ ]] || die "APP_WAIT_TIMEOUT must be a number of seconds"
   [[ $APP_INSTALL =~ ^(auto|always|never)$ ]] || die "APP_INSTALL must be auto, always or never"
@@ -90,6 +101,9 @@ config::validate() {
   if [[ $APP_MODE == folder ]]; then
     [[ -n $APP_DIR ]] || die "APP_DIR is required in folder mode"
     [[ -d $APP_DIR ]] || die "APP_DIR does not exist: $APP_DIR"
+  elif [[ $APP_MODE == script ]]; then
+    [[ -n $APP_SCRIPT ]] || die "APP_SCRIPT is required in script mode"
+    [[ -f $APP_SCRIPT ]] || die "APP_SCRIPT does not exist: $APP_SCRIPT"
   else
     [[ -n $DOCKER_IMAGE ]] || die "DOCKER_IMAGE is required in container mode"
     [[ $DOCKER_PULL =~ ^(always|missing|never)$ ]] || die "DOCKER_PULL must be always, missing or never"
@@ -110,7 +124,7 @@ config::resolve_path() {
   fi
 }
 
-# Env files may hold registry passwords; nag if other users can read them.
+# Env files may hold registry passwords; warn if other users can read them.
 config::warn_if_exposed() {
   grep -q '^DOCKER_PASSWORD=' "$APP_ENV_FILE" || return 0
   local mode

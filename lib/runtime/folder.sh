@@ -2,8 +2,9 @@
 #
 #   detect stack -> install deps if they changed -> start -> wait for URL -> open browser
 #
-# The app runs in its own process group, so stopping Liftoff (Ctrl+C or closing
-# the terminal) stops the whole tree — dev servers, watchers and all.
+# The app runs in its own process group, so stopping the launcher (Ctrl+C or
+# closing the terminal) stops the whole tree — dev servers, watchers and all.
+# folder::start and folder::use_node are shared with script mode.
 
 folder::run() {
   [[ -n $APP_NODE_VERSION ]] && folder::use_node "$APP_NODE_VERSION"
@@ -32,16 +33,26 @@ folder::start() {
   trap 'exit 130' INT TERM HUP
 
   if [[ -n $APP_URL ]]; then
-    url::wait_for "$APP_URL" "$APP_WAIT_TIMEOUT" kill -0 "$APP_PID" || exit 1
+    url::wait_for "$APP_URL" "$APP_WAIT_TIMEOUT" folder::is_alive || exit 1
     url::open_browser
   fi
 
   log::info "Running. Press Ctrl+C or close this window to stop."
-  wait "$APP_PID"
+  wait "$APP_PID" || true
+
+  # Start scripts that background their server and exit leave it running in
+  # the same process group — keep watching until that is gone too.
+  while folder::is_alive; do sleep 1; done
+}
+
+# True while anything started by START_CMD is still running, not just the
+# command itself.
+folder::is_alive() {
+  kill -0 -- "-$APP_PID" 2>/dev/null
 }
 
 folder::stop() {
-  kill -0 "$APP_PID" 2>/dev/null || return 0
+  folder::is_alive || return 0
   log::info "Stopping $APP_NAME"
   kill -TERM -- "-$APP_PID" 2>/dev/null || true
 }
