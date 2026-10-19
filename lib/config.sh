@@ -59,6 +59,7 @@ config::apply_defaults() {
 
   # Script mode
   APP_SCRIPT=${APP_SCRIPT:-}
+  APP_SCRIPT_ARGS=${APP_SCRIPT_ARGS:-}
 
   # Container mode
   DOCKER_IMAGE=${DOCKER_IMAGE:-}

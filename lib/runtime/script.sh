@@ -29,4 +29,5 @@ script::command() {
   else
     printf 'bash %q' "$APP_SCRIPT"
   fi
+  [[ -z $APP_SCRIPT_ARGS ]] || printf ' %s' "$APP_SCRIPT_ARGS"
 }
