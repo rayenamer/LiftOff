@@ -43,6 +43,12 @@ folder::start() {
   # Start scripts that background their server and exit leave it running in
   # the same process group — keep watching until that is gone too.
   while folder::is_alive; do sleep 1; done
+
+  # Services detached elsewhere (e.g. `docker compose up -d`) outlive the
+  # process group; with a stop command, hold until the window is closed.
+  if [[ -n $APP_STOP_CMD ]]; then
+    while :; do sleep 1; done
+  fi
 }
 
 # True while anything started by START_CMD is still running, not just the
@@ -52,9 +58,22 @@ folder::is_alive() {
 }
 
 folder::stop() {
-  folder::is_alive || return 0
-  log::info "Stopping $APP_NAME"
-  kill -TERM -- "-$APP_PID" 2>/dev/null || true
+  if folder::is_alive; then
+    log::info "Stopping $APP_NAME" 2>/dev/null || true
+    kill -TERM -- "-$APP_PID" 2>/dev/null || true
+  fi
+  folder::run_stop_cmd
+}
+
+# Detached from the terminal and logged to a file, so it still finishes when
+# the window was closed and the tty is already gone.
+folder::run_stop_cmd() {
+  [[ -n $APP_STOP_CMD ]] || return 0
+  local log_file
+  log_file="$(app_state_dir)/stop.log"
+  log::info "Stopping: $APP_STOP_CMD" 2>/dev/null || true
+  setsid bash -c "$APP_STOP_CMD" </dev/null >>"$log_file" 2>&1 &
+  wait $! || log::warn "Stop command failed — see $log_file" 2>/dev/null || true
 }
 
 folder::install_deps() {

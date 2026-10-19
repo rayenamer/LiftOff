@@ -55,6 +55,7 @@ config::apply_defaults() {
   APP_INSTALL=${APP_INSTALL:-auto}
   APP_INSTALL_CMD=${APP_INSTALL_CMD:-}
   APP_START_CMD=${APP_START_CMD:-}
+  APP_STOP_CMD=${APP_STOP_CMD:-}
   APP_NODE_VERSION=${APP_NODE_VERSION:-}
 
   # Script mode
